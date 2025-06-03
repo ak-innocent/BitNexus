@@ -298,3 +298,87 @@
     (ok true)
   )
 )
+
+;; ASSET MANAGEMENT FUNCTIONS
+
+(define-public (mint-nexus-asset
+    (name (string-ascii 50))
+    (description (string-ascii 200))
+    (rarity (string-ascii 20))
+    (power-level uint)
+    (world-id uint)
+    (attributes (list 10 (string-ascii 20)))
+  )
+  (let ((token-id (+ (var-get total-assets) u1)))
+    (asserts! (is-protocol-admin tx-sender) ERR-NOT-AUTHORIZED)
+    (asserts! (is-valid-name name) ERR-INVALID-NAME)
+    (asserts! (is-valid-description description) ERR-INVALID-DESCRIPTION)
+    (asserts! (is-valid-rarity rarity) ERR-INVALID-RARITY)
+    (asserts! (is-valid-power-level power-level) ERR-INVALID-POWER-LEVEL)
+    (asserts! (is-some (get-world-details world-id)) ERR-WORLD-NOT-FOUND)
+    (asserts! (is-valid-attributes attributes) ERR-INVALID-ATTRIBUTES)
+    (try! (nft-mint? nexus-asset token-id tx-sender))
+    (map-set nexus-asset-metadata { token-id: token-id } {
+      name: name,
+      description: description,
+      rarity: rarity,
+      power-level: power-level,
+      world-id: world-id,
+      attributes: attributes,
+      experience: u0,
+      level: u1,
+    })
+    (var-set total-assets token-id)
+    (ok token-id)
+  )
+)
+
+(define-public (transfer-game-asset
+    (token-id uint)
+    (recipient principal)
+  )
+  (begin
+    (asserts!
+      (is-eq tx-sender
+        (unwrap! (nft-get-owner? nexus-asset token-id) ERR-INVALID-GAME-ASSET)
+      )
+      ERR-NOT-AUTHORIZED
+    )
+    (asserts! (is-valid-principal recipient) ERR-INVALID-INPUT)
+    (nft-transfer? nexus-asset token-id tx-sender recipient)
+  )
+)
+
+;; AVATAR SYSTEM FUNCTIONS
+
+(define-public (create-avatar
+    (name (string-ascii 50))
+    (world-access (list 10 uint))
+  )
+  (let ((avatar-id (+ (var-get total-avatars) u1)))
+    (asserts! (is-valid-name name) ERR-INVALID-NAME)
+    (asserts! (is-valid-world-access world-access) ERR-INVALID-WORLD-ACCESS)
+    (asserts! (is-none (map-get? leaderboard { player: tx-sender }))
+      ERR-ALREADY-REGISTERED
+    )
+    (try! (nft-mint? nexus-avatar avatar-id tx-sender))
+    (map-set avatar-metadata { avatar-id: avatar-id } {
+      name: name,
+      level: u1,
+      experience: u0,
+      achievements: (list),
+      equipped-assets: (list),
+      world-access: world-access,
+    })
+    (map-set leaderboard { player: tx-sender } {
+      score: u0,
+      games-played: u0,
+      total-rewards: u0,
+      avatar-id: avatar-id,
+      rank: u0,
+      achievements: (list),
+    })
+    (var-set total-avatars avatar-id)
+    (ok avatar-id)
+  )
+)
